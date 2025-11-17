@@ -1,12 +1,68 @@
-# README: Configuració d'Infraestructura i Serveis de Xarxa
+# Projecte d'Infraestructura de Xarxa Segura (OpenData BCN)
 
-Aquest document detalla el procés pas a pas per configurar la infraestructura de xarxa del projecte, incloent-hi el router `R-N01` i els serveis de xarxa essencials (DHCP i DNS).
+Aquest projecte té com a objectiu principal el disseny i la implementació d'una infraestructura de sistemes segura, escalable i professional per allotjar una aplicació web. Aquesta aplicació consumirà i gestionarà dades obertes (Open Data) reals provinents de l'Ajuntament de Barcelona sobre equipaments educatius.
 
-## 1\. Tasca 2.1: Desplegament del Router (R-N01)
+L'entorn simula una arquitectura empresarial real, prioritzant la seguretat mitjançant la segmentació de xarxes (DMZ vs Intranet), l'ús de sistemes operatius Linux (Ubuntu Server) i la configuració manual de serveis crítics d'infraestructura com l'enrutament, el tallafocs, el DHCP i el DNS.
+
+## 1\. Arquitectura de Xarxa
+
+### 1.1. Esquema de la Topologia
+
+```text
+      ☁️ INTERNET (Xarxa Default / NAT)
+                  |
+                  v
+      +--------------------------------+
+      |      🛡️ ROUTER (R-N01)        |
+      |   Firewall / DHCP / DNS        |
+      |   IPs: 192.168.10.1 / 110.1    |
+      +-------+----------------+-------+
+              |                |
+              |                |
+   (Trànsit Filtrat)    (Trànsit Filtrat)
+              |                |
+              v                v
++---------------------+  +---------------------+
+|  🌐 DMZ (G1a)       |  |  🏠 INTRANET (G1)   |
+|  192.168.110.0/24   |  |  192.168.10.0/24    |
++---------------------+  +---------------------+
+|                     |  |                     |
+| [🖥️ W-N01 (Web)]    |  | [🛢️ B-N01 (BBDD)]   |
+|   IP: .110.10       |  |   IP: .10.10        |
+|                     |  |                     |
+| [📁 F-N01 (FTP)]    |  | [🐧 Clients]        |
+|   IP: .110.11       |  |   IP: DHCP (.100+)  |
+|                     |  |                     |
++---------------------+  +---------------------+
+
+       FLUXOS DE DADES PERMESOS:
+       -------------------------
+       1. Clients -> Web (Port 80)
+       2. Clients -> FTP (Ports 20/21)
+       3. Web -> BBDD (Port 3306 - MySQL)
+```
+
+### 1.2. Justificació del Disseny
+
+Hem implementat una arquitectura de "Defensa en Profunditat" dividida en tres zones: Internet, DMZ i Intranet. El nucli és el **Router R-N01**, que centralitza la gestió i actua com a tallafocs. Ubiquem els serveis públics (Web i FTP) a la **DMZ** per aïllar possibles atacs externs, impedint que comprometin la xarxa interna. Els actius crítics, com la **Base de Dades** i els clients, es protegeixen a la **Intranet**, sent inaccessibles des de l'exterior. L'única comunicació permesa entre zones és la estrictament necessària (el web consultant la BBDD), garantint així la màxima seguretat i control de les dades.
+
+## 2\. Esquema de Necessitats Tecnològiques
+
+| Rol / Màquina | Sistema Operatiu | Programari / Serveis Clave | Justificació de l'Elecció |
+| :--- | :--- | :--- | :--- |
+| **R-N01 (Router)** | Ubuntu Server 22.04 | `netplan`, `iptables`, `isc-dhcp-server`, `bind9` | Nucli de la xarxa. La versió Server garanteix estabilitat i baix consum per gestionar l'encaminament, NAT i seguretat. |
+| **B-N01 (BBDD)** | Ubuntu Server 22.04 | `mysql-server` | Servidor dedicat exclusivament a dades. MySQL és l'estàndard robust per a aquests projectes. No requereix interfície gràfica. |
+| **W-N01 (Web)** | Ubuntu Server 22.04 | *(A definir)* | Situat a la DMZ. Requerirà un sistema lleuger i fàcil de securitzar. |
+| **F-N01 (FTP)** | Ubuntu Server 22.04 | `vsftpd` | Servidor optimitzat per a la transferència ràpida de fitxers entre la Intranet i l'exterior. |
+| **Clients** | Ubuntu Desktop | Navegadors, Terminal, `ssh` | Equips amb entorn gràfic (GUI) necessaris per simular l'usuari final, comprovar la web i administrar els servidors visualment. |
+
+-----
+
+## 3\. Desplegament del Router (R-N01)
 
 L'objectiu d'aquesta fase és crear la màquina virtual que actuarà com a enllaç entre totes les nostres xarxes i Internet.
 
-### 1.1. Creació de la VM (IsardVDI)
+### 3.1. Creació de la VM
 
 Hem creat una nova màquina virtual (`VM`) a IsardVDI amb les següents especificacions:
 
@@ -21,7 +77,7 @@ Hem creat una nova màquina virtual (`VM`) a IsardVDI amb les següents especifi
 
 ![Hostname](./imgs/0.hostname.png)
 
-### 1.2. Planificació de Xarxa i Identificació
+### 3.2. Planificació de Xarxa i Identificació
 
 Abans de configurar, hem identificat els noms de les interfícies que Ubuntu ha assignat:
 
@@ -29,7 +85,7 @@ Abans de configurar, hem identificat els noms de les interfícies que Ubuntu ha 
   * `enp2s0`: Xarxa `G1` (Intranet) - Li assignarem la IP `192.168.10.1`.
   * `enp3s0`: Xarxa `G1a` (DMZ) - Li assignarem la IP `192.168.110.1`.
 
-### 1.3. Configuració de Xarxa (Netplan)
+### 3.3. Configuració de Xarxa (Netplan)
 
 Hem configurat les interfícies de xarxa del router `R-N01` editant el fitxer de configuració de `netplan` (`/etc/netplan/00-installer-config.yaml`).
 
@@ -42,7 +98,8 @@ Aquí hem assignat les IPs estàtiques a `enp2s0` (192.168.10.1/24) i `enp3s0` (
 Un cop configurat, hem aplicat els canvis amb `sudo netplan apply`.
 
 ![Netplan del router](./imgs/2.netplan.png)
-### 1.4. Habilitació de l'Enrutament (IP Forwarding)
+
+### 3.4. Habilitació de l'Enrutament (IP Forwarding)
 
 Per permetre que el router reenviï paquets entre les interfícies, hem activat l'IP forwarding.
 
@@ -59,7 +116,7 @@ I hem aplicat els canvis sense reiniciar:
 
 ![Sysctl](./imgs/4.systcl.png)
 
-### 1.5. Configuració de NAT (iptables)
+### 3.5. Configuració de NAT (iptables)
 
 Per donar sortida a Internet a les nostres xarxes (`G1` i `G1a`), hem configurat regles de NAT (Network Address Translation) amb `iptables` perquè s'emmascarin darrere la IP de la nostra interfície `default` (`enp1s0`).
 
@@ -68,7 +125,7 @@ Per donar sortida a Internet a les nostres xarxes (`G1` i `G1a`), hem configurat
 
 ![Iptables](./imgs/6.iptables.png)
 
-### 1.6. Creació de l'Usuari bchecker
+### 3.6. Creació de l'Usuari bchecker
 
 Finalment, hem creat l'usuari requerit pel projecte:
 
@@ -76,11 +133,11 @@ Finalment, hem creat l'usuari requerit pel projecte:
 
 -----
 
-## 2\. Tasca 3.1: Implementació del Servei DHCP
+## 4\. Implementació del Servei DHCP
 
 L'objectiu és que els clients de la xarxa Intranet (`G1`) rebin una configuració de xarxa automàticament.
 
-### 2.1. Instal·lació (a R-N01)
+### 4.1. Instal·lació (a R-N01)
 
 Hem instal·lat el servidor `isc-dhcp-server` a la mateixa màquina `R-N01`.
 
@@ -88,7 +145,7 @@ Hem instal·lat el servidor `isc-dhcp-server` a la mateixa màquina `R-N01`.
 sudo apt install -y isc-dhcp-server
 ```
 
-### 2.2. Configuració de la Interfície d'Escolta
+### 4.2. Configuració de la Interfície d'Escolta
 
 Hem editat el fitxer `/etc/default/isc-dhcp-server` per indicar al servei que només escolti peticions a la interfície de la Intranet (`enp2s0`).
 
@@ -100,7 +157,7 @@ Hem modificat la línia `INTERFACESv4="enp2s0"`.
 
 ![Isc](./imgs/8.isc.png)
 
-### 2.3. Definició de l'Abast (Scope)
+### 4.3. Definició de l'Abast
 
 Primer hem copiat l'arxiu original per si de cas.
 
@@ -138,11 +195,11 @@ Veiem que rep la ip 192.168.10.100, el router funciona i reparteix Ip's.
 
 -----
 
-## 3\. Tasca 3.2: Implementació del Servei DNS
+## 5\. Implementació del Servei DNS
 
 L'objectiu és crear un servidor DNS per resoldre noms interns (com `R-N01`) i complir els requisits del projecte.
 
-### 3.1. Instal·lació (a R-N01)
+### 5.1. Instal·lació (a R-N01)
 
 Hem instal·lat el programari BIND9 al router `R-N01`.
 
@@ -150,7 +207,7 @@ Hem instal·lat el programari BIND9 al router `R-N01`.
 sudo apt install -y bind9 bind9utils
 ```
 
-### 3.2. Configuració d'Opcions Globals
+### 5.2. Configuració d'Opcions Globals
 
 Hem editat `/etc/bind/named.conf.options` per definir qui pot consultar el nostre DNS (les nostres xarxes de confiança `acl "trusted"`) i per reenviar peticions externes (com `google.com`) a servidors DNS públics.
 
@@ -159,7 +216,8 @@ sudo nano /etc/bind/named.conf.options
 ```
 
 ![named.conf](./imgs/14.named.conf.png)
-### 3.3. Creació de la Zona DNS Local
+
+### 5.3. Creació de la Zona DNS Local
 
 Hem definit la nostra zona de domini personalitzada `projecte.G1.0.0` editant el fitxer `/etc/bind/named.conf.local`.
 
@@ -169,7 +227,7 @@ sudo nano /etc/bind/named.conf.local
 
 ![named.conf.local](./imgs/15.named.conf.local.png)
 
-### 3.4. Creació del Fitxer de Zona
+### 5.4. Creació del Fitxer de Zona
 
 Hem creat el fitxer `/etc/bind/db.projecte.G1.0.0` (on s'ha copiat `/etc/bind/db.local` com a base) per definir el "mapa" de noms a IPs. En aquest fitxer hem afegit els registres 'A' per a:
 
@@ -188,7 +246,7 @@ sudo nano /etc/bind/db.projecte.G1.0.0
 
 
 
-### 3.5. Validació i Reinici
+### 5.5. Validació i Reinici
 
 Hem validat la sintaxi dels nostres fitxers de configuració:
 
@@ -207,7 +265,7 @@ sudo systemctl restart bind9
 
 -----
 
-## 4\. Integració de DHCP i DNS
+## 6\. Integració de DHCP i DNS
 
 L'últim pas ha estat connectar els dos serveis. Hem modificat el servidor **DHCP** perquè informi els clients que el nostre **nou servidor DNS** és `192.168.10.1` i que el seu domini de cerca és `projecte.G1.0.0`.
 
@@ -226,11 +284,11 @@ sudo systemctl restart isc-dhcp-server
 
 -----
 
-## 5\. Configuració i Verificació del Client
+## 7\. Configuració i Verificació del Client
 
 Finalment, hem configurat el nostre **Client Ubuntu Desktop** (connectat només a la xarxa `G1`) perquè demanés IP per DHCP.
 
-### 5.1. Configuració Netplan (Client)
+### 7.1. Configuració Netplan (Client)
 
 Hem editat el seu fitxer (`/etc/netplan/01-network-manager-all.yaml`) per activar `dhcp4: true`.
 
@@ -240,7 +298,7 @@ sudo nano /etc/netplan/01-network-manager-all.yaml
 
 Després d'un `sudo netplan apply` (o un reinici), el client ha rebut la IP `192.168.10.100` del DHCP.
 
-### 5.2. Verificació DNS (Client)
+### 7.2. Verificació DNS (Client)
 
 La prova final ha estat comprovar que el client havia rebut la informació del domini de cerca:
 
@@ -260,5 +318,83 @@ ping google.com
 
 ![image info](./imgs/image20.png)
 
+## 8\. Desplegament del Servidor de Base de Dades (B-N01)
 
-Ja hem acabat l'sprint
+Hem desplegat la màquina virtual que allotjarà les dades del projecte.
+
+### 8.1. Creació i Configuració de Xarxa
+
+  * **VM:** Ubuntu Server 22.04 LTS.
+  * **Hostname:** `B-N01`.
+  * **Xarxa:** Una única interfície connectada a `G1` (Intranet).
+
+Hem configurat una **IP estàtica** editant `/etc/netplan/00-installer-config.yaml` per assegurar que sempre sigui accessible a `192.168.10.10`.
+
+![image info](./imgs/netplanbbdd.png)
+
+### 8.2. Instal·lació i Securització de MySQL
+
+Hem instal·lat el servidor MySQL:
+
+```bash
+sudo apt update && sudo apt install -y mysql-server
+```
+
+Hem executat l'script de seguretat `mysql_secure_installation` per establir la contrasenya de `root`, eliminar usuaris anònims i deshabilitar l'accés remot de root.
+
+A més, hem editat `/etc/mysql/mysql.conf.d/mysqld.cnf` per permetre connexions des de la xarxa (canviant `bind-address` de `127.0.0.1` a la IP del servidor `192.168.10.10`).
+
+![image info](./imgs/mysqldconf.png)
+
+També hem creat l'usuari bchecker
+
+![image info](./imgs/usersbbdd.png)
+
+## 9\. Importació de Dades i Gestió d'Usuaris
+
+L'objectiu era carregar un fitxer CSV amb dades d'equipaments educatius de Barcelona a la base de dades.
+
+### 9.1. Transferència del Fitxer CSV
+
+Com que el servidor no té entorn gràfic, hem descarregat el fitxer `.csv` al **Client Ubuntu Desktop** i l'hem transferit al servidor BBDD mitjançant `scp`:
+
+```bash
+scp opendatabcn_llista-equipaments_educacio-csv.csv bchecker@192.168.10.10:/tmp/
+```
+
+![image info](./imgs/scp.png)
+
+Dins del servidor, hem mogut l'arxiu a la carpeta segura de MySQL per permetre la importació i hem ajustat els permisos.
+
+![image info](./imgs/chowncsv
+.png)
+
+### 9.2. Creació de l'Estructura i Càrrega
+
+Vam eliminar qualsevol taula existent per començar amb una estructura neta i evitar conflictes
+
+Vam crear una nova taula amb 39 columnes que corresponen exactament als camps del fitxer CSV d'equipaments educatius.
+
+![image info](./imgs/createtable.png)
+
+Vam carregar tota la informació del fitxer CSV a la taula, utilitzant la configuració adequada per gestionar cometes, separadors i la fila de capçalera.
+
+![image info](./imgs/loadcsv.png)
+
+Vam confirmar que la importació es va completar amb èxit comptant el total de registres inserits a la base de dades.
+
+![image info](./imgs/comprobaciobbdd.png)
+
+## 10\. Actualització del Router (Firewall)
+
+Finalment, per permetre que la futura aplicació web (que estarà a la DMZ, IP `.110.10`) pugui consultar aquestes dades (a la Intranet, IP `.10.10`), hem afegit una regla específica al tallafocs del Router `R-N01`.
+
+```bash
+sudo iptables -A FORWARD -i enp3s0 -o enp2s0 -s 192.168.110.10 -d 192.168.10.10 -p tcp --dport 3306 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+![image info](./imgs/iptablesrouter.png)
+![image info](./imgs/accessbbdd.png)
+
+Això garanteix que només el servidor web tingui accés al port de base de dades, mantenint la resta de la xarxa aïllada.
