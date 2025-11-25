@@ -23,7 +23,7 @@ L'entorn simula una arquitectura empresarial real, prioritzant la seguretat mitj
               |                |
               v                v
 +---------------------+  +---------------------+
-|  🌐 DMZ (G1a)       |  |  🏠 INTRANET (G1)   |
+|  🌐 DMZ (ITB1a)     |  |  🏠 INTRANET (ITB1) |
 |  192.168.110.0/24   |  |  192.168.10.0/24    |
 +---------------------+  +---------------------+
 |                     |  |                     |
@@ -70,8 +70,8 @@ Hem creat una nova màquina virtual (`VM`) a IsardVDI amb les següents especifi
   * **Nom:** `R-N01`
   * **Targetes de Xarxa:** 3
     1.  Targeta 1: Connectada a `default` ( actuarà com a NAT per sortir a Internet).
-    2.  Targeta 2: Connectada a `G1` (la nostra futura Intranet).
-    3.  Targeta 3: Connectada a `G1a` (la nostra futura DMZ).
+    2.  Targeta 2: Connectada a `ITB1` (Intranet).
+    3.  Targeta 3: Connectada a `ITB1a` (DMZ).
 
 ![Tarjetes de xarxa](./imgs/1.tarjetesxarxa.png)
 
@@ -82,8 +82,8 @@ Hem creat una nova màquina virtual (`VM`) a IsardVDI amb les següents especifi
 Abans de configurar, hem identificat els noms de les interfícies que Ubuntu ha assignat:
 
   * `enp1s0`: Xarxa `default` (NAT) - Rebrà IP per DHCP d'IsardVDI.
-  * `enp2s0`: Xarxa `G1` (Intranet) - Li assignarem la IP `192.168.10.1`.
-  * `enp3s0`: Xarxa `G1a` (DMZ) - Li assignarem la IP `192.168.110.1`.
+  * `enp2s0`: Xarxa `ITB1` (Intranet) - Li assignarem la IP `192.168.10.1`.
+  * `enp3s0`: Xarxa `ITB1a` (DMZ) - Li assignarem la IP `192.168.110.1`.
 
 ### 3.3. Configuració de Xarxa (Netplan)
 
@@ -104,7 +104,6 @@ Un cop configurat, hem aplicat els canvis amb `sudo netplan apply`.
 Per permetre que el router reenviï paquets entre les interfícies, hem activat l'IP forwarding.
 
 ```bash
-# Obrim el fitxer de configuració del nucli
 sudo nano /etc/sysctl.conf
 ```
 
@@ -118,7 +117,7 @@ I hem aplicat els canvis sense reiniciar:
 
 ### 3.5. Configuració de NAT (iptables)
 
-Per donar sortida a Internet a les nostres xarxes (`G1` i `G1a`), hem configurat regles de NAT (Network Address Translation) amb `iptables` perquè s'emmascarin darrere la IP de la nostra interfície `default` (`enp1s0`).
+Per donar sortida a Internet a les nostres xarxes (`ITB1` i `ITB1a`), hem configurat regles de NAT (Network Address Translation) amb `iptables` perquè s'emmascarin darrere la IP de la nostra interfície `default` (`enp1s0`).
 
 ![Iptables](./imgs/5.iptables.png)
 
@@ -135,7 +134,7 @@ Finalment, hem creat l'usuari requerit pel projecte:
 
 ## 4\. Implementació del Servei DHCP
 
-L'objectiu és que els clients de la xarxa Intranet (`G1`) rebin una configuració de xarxa automàticament.
+L'objectiu és que els clients de la xarxa Intranet (`ITB1`) rebin una configuració de xarxa automàticament.
 
 ### 4.1. Instal·lació (a R-N01)
 
@@ -385,6 +384,43 @@ Vam confirmar que la importació es va completar amb èxit comptant el total de 
 
 ![image info](./imgs/comprobaciobbdd.png)
 
+### 9.3.  Resolució d'Incidències de Dades
+
+Ens vam adonar que haver guardat les 39 columnes era una errada, no totes eren rellevants, a més vam detectar durant la verificació de la base de dades, problemes amb el format de les dades importades: caràcters corruptes (codificació incorrecta) i errors de claus duplicades.
+
+#### Conversió de Codificació
+
+El fitxer original estava en format `UTF-16LE`, cosa que generava espais en blanc entre caràcters a MySQL. Vam solucionar-ho convertint l'arxiu a `UTF-8` mitjançant la terminal del servidor BBDD:
+
+```bash
+sudo iconv -f UTF-16LE -t UTF-8 opendatabcn.csv -o final.csv
+```
+
+#### Reestructuració de la Taula
+
+Per evitar l'error `Duplicate entry` (ja que `id_registre` no era únic al CSV), vam modificar l'estructura de la taula afegint un camp `id_intern` autoincremental com a clau primària (PK).
+
+```sql
+CREATE TABLE equipaments (
+    id INT NOT NULL AUTO_INCREMENT,
+    id_registre VARCHAR(20) DEFAULT NULL,
+    nom VARCHAR(255) DEFAULT NULL,
+    nom_carrer VARCHAR(255) DEFAULT NULL,
+    numero_carrer VARCHAR(50) DEFAULT NULL,
+    nom_barri VARCHAR(100) DEFAULT NULL,
+    nom_districte VARCHAR(100) DEFAULT NULL,
+    codi_postal VARCHAR(10) DEFAULT NULL,
+    poblacio VARCHAR(100) DEFAULT NULL,
+    latitud DECIMAL(11,8) DEFAULT NULL,
+    longitud DECIMAL(11,8) DEFAULT NULL,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+Amb aquests canvis, la càrrega de dades (`LOAD DATA INFILE`) es va realitzar correctament.
+
+![image info](./imgs/selectbbdd.png)
+
 ## 10\. Actualització del Router (Firewall)
 
 Finalment, per permetre que la futura aplicació web (que estarà a la DMZ, IP `.110.10`) pugui consultar aquestes dades (a la Intranet, IP `.10.10`), hem afegit una regla específica al tallafocs del Router `R-N01`.
@@ -397,4 +433,102 @@ sudo netfilter-persistent save
 ![image info](./imgs/iptablesrouter.png)
 ![image info](./imgs/accessbbdd.png)
 
-Això garanteix que només el servidor web tingui accés al port de base de dades, mantenint la resta de la xarxa aïllada.
+
+## 11\. Desplegament del Servidor FTP (F-N01)
+
+Hem desplegat un servidor de transferència de fitxers a la **DMZ** (`192.168.110.11`) perquè sigui accessible des de la Intranet però aïllat de les dades crítiques.
+
+### 11.1. Instal·lació i Configuració
+
+Hem utilitzat `vsftpd`. La configuració clau (`/etc/vsftpd.conf`) inclou:
+
+  * **Seguretat:** Usuaris engabiats (`chroot_local_user=YES`) i anònims deshabilitats.
+  * **Xarxa:** Configuració de **Ports Passius** (10000-10100) per permetre la connexió a través del tallafocs.
+
+![image info](./imgs/ftp1.png)
+
+![image info](./imgs/ftp2.png)
+
+![image info](./imgs/ftp3.png)
+
+
+### 11.2. Obertura de Ports al Router
+
+Per permetre que els clients de la Intranet connectin amb la DMZ, hem afegit regles al Router `R-N01` per als ports de control (21), dades actives (20) i passius:
+
+```bash
+sudo iptables -A FORWARD -i enp2s0 -o enp3s0 -p tcp --dport 21 -d 192.168.110.11 -j ACCEPT
+sudo iptables -A FORWARD -i enp2s0 -o enp3s0 -p tcp --dport 10000:10100 -d 192.168.110.11 -j ACCEPT
+```
+
+-----
+
+### 11.3 Comprovació de funcionament
+
+Hem fet una prova per veure si funcionava
+
+Es connecta per la ip i passem un arxiu:
+
+![image info](./imgs/ftpcheck.png)
+
+Veiem que s'ha pujat
+
+![image info](./imgs/ftpcheck2.png)
+
+També resol per DNS
+
+![image info](./imgs/ftpcheck3.png)
+
+
+## 12\. Desplegament del Servidor Web (W-N01)
+
+Hem configurat el servidor encarregat de mostrar l'aplicació a la **DMZ** (`192.168.110.10`).
+
+![image info](./imgs/webserver.png)
+
+### 12.1. Stack Tecnològic
+
+Hem instal·lat un entorn LAMP lleuger (sense MySQL local, ja que connecta al remot):
+
+  * **Apache2:** Servidor web.
+  * **PHP + php-mysql:** Llenguatge de backend i connector de base de dades.
+
+### 12.2. Configuració de Connectivitat
+
+Hem verificat que el servidor web té visibilitat cap al servidor de BBDD (`192.168.10.10`) gràcies a la regla del port 3306 configurada al Router en la fase anterior.
+
+![image info](./imgs/pingbbdd.png)
+
+-----
+
+## 13\. Desenvolupament i Implementació de l'Aplicació
+
+Hem desenvolupat amb ajuda de la IA una aplicació web moderna per visualitzar les dades dels equipaments. L'aplicació consta de:
+
+1.  **Backend (PHP):** Un script `get_equipaments.php` que connecta a la BBDD remota, executa la consulta SQL i retorna les dades en format JSON.
+2.  **Frontend (JS + Leaflet):** Una interfície que consumeix el JSON i mostra les dades en tres vistes: Taula, Targetes i Mapa interactiu.
+
+-----
+
+## 14\. Verificació amb Client Windows
+
+Per validar la interoperabilitat de la xarxa, hem desplegat un client **Windows 11** a la xarxa Intranet (`ITB1`).
+
+  * **Configuració:** Ha obtingut IP automàticament del nostre servidor DHCP (`R-N01`).
+  * **Prova:** Hem accedit a través del navegador a `http://192.168.110.10` (Servidor Web) i hem comprovat que l'aplicació carrega correctament, demostrant que el rutejament i les regles de firewall funcionen per a qualsevol sistema operatiu client.
+
+-----
+
+## 15\. Proves de Sistema i Conclusions
+
+S'han realitzat les següents proves funcionals amb èxit:
+
+| Prova | Origen | Destí | Resultat |
+| :--- | :--- | :--- | :--- |
+| **Ping** | Client Intranet | Router / Web / FTP | ✅ Èxit |
+| **SSH** | Client Intranet | Tots els servidors | ✅ Èxit |
+| **MySQL Remot** | Servidor Web (DMZ) | Servidor BBDD (Intranet) | ✅ Èxit (Port 3306 obert) |
+| **FTP Upload** | Client Intranet | Servidor FTP (DMZ) | ✅ Èxit (Ports passius OK) |
+| **Navegació Web** | Client Windows | Servidor Web (DMZ) | ✅ Èxit |
+
+**Conclusió:** La infraestructura desplegada compleix amb els requisits de seguretat, segmentació i funcionalitat, oferint un entorn robust per a la gestió de dades obertes.
