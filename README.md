@@ -497,7 +497,7 @@ Hem instal·lat un entorn LAMP lleuger (sense MySQL local, ja que connecta al re
 
 Hem verificat que el servidor web té visibilitat cap al servidor de BBDD (`192.168.10.10`) gràcies a la regla del port 3306 configurada al Router en la fase anterior.
 
-![image info](./imgs/pingbbdd.png)
+![image info](./imgs/pingbdd.png)
 
 -----
 
@@ -517,6 +517,9 @@ Per validar la interoperabilitat de la xarxa, hem desplegat un client **Windows 
   * **Configuració:** Ha obtingut IP automàticament del nostre servidor DHCP (`R-N01`).
   * **Prova:** Hem accedit a través del navegador a `http://192.168.110.10` (Servidor Web) i hem comprovat que l'aplicació carrega correctament, demostrant que el rutejament i les regles de firewall funcionen per a qualsevol sistema operatiu client.
 
+![image info](./imgs/w11comprobacio.png)
+  
+
 -----
 
 ## 15\. Proves de Sistema i Conclusions
@@ -531,4 +534,4 @@ S'han realitzat les següents proves funcionals amb èxit:
 | **FTP Upload** | Client Intranet | Servidor FTP (DMZ) | ✅ Èxit (Ports passius OK) |
 | **Navegació Web** | Client Windows | Servidor Web (DMZ) | ✅ Èxit |
 
-**Conclusió:** La infraestructura desplegada compleix amb els requisits de seguretat, segmentació i funcionalitat, oferint un entorn robust per a la gestió de dades obertes.
+**Conclusió:** La infraestructura desplegada compleix amb els requisits de seguretat, segmentació i funcionalitat, oferint un entorn robust per a la gestió de dades obertes. Hem patit la baixa de un company, hem afrontat problemes durant el projecte però no obstant això hem acabat desplegant les funcionalitats requerides, fent ús de metodologies àgils, treball en equip i estructuració i documentació del treball mitjançant reunions diàries.
