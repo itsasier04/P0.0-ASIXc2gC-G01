@@ -52,7 +52,7 @@ Hem implementat una arquitectura de "Defensa en Profunditat" dividida en tres zo
 | :--- | :--- | :--- | :--- |
 | **R-N01 (Router)** | Ubuntu Server 22.04 | `netplan`, `iptables`, `isc-dhcp-server`, `bind9` | Nucli de la xarxa. La versió Server garanteix estabilitat i baix consum per gestionar l'encaminament, NAT i seguretat. |
 | **B-N01 (BBDD)** | Ubuntu Server 22.04 | `mysql-server` | Servidor dedicat exclusivament a dades. MySQL és l'estàndard robust per a aquests projectes. No requereix interfície gràfica. |
-| **W-N01 (Web)** | Ubuntu Server 22.04 | *(A definir)* | Situat a la DMZ. Requerirà un sistema lleuger i fàcil de securitzar. |
+| **W-N01 (Web)** | Ubuntu Server 22.04 | Apache, js, php, html i css | Situat a la DMZ. Requerirà un sistema lleuger i fàcil de securitzar. |
 | **F-N01 (FTP)** | Ubuntu Server 22.04 | `vsftpd` | Servidor optimitzat per a la transferència ràpida de fitxers entre la Intranet i l'exterior. |
 | **Clients** | Ubuntu Desktop | Navegadors, Terminal, `ssh` | Equips amb entorn gràfic (GUI) necessaris per simular l'usuari final, comprovar la web i administrar els servidors visualment. |
 
@@ -365,8 +365,7 @@ scp opendatabcn_llista-equipaments_educacio-csv.csv bchecker@192.168.10.10:/tmp/
 
 Dins del servidor, hem mogut l'arxiu a la carpeta segura de MySQL per permetre la importació i hem ajustat els permisos.
 
-![image info](./imgs/chowncsv
-.png)
+![image info](./imgs/chowncsv.png)
 
 ### 9.2. Creació de l'Estructura i Càrrega
 
